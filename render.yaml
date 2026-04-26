@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: resume-analyzer-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: MONGO_URI
+        sync: false        # you will paste this from MongoDB Atlas
+      - key: JWT_SECRET
+        sync: false        # you will set a strong secret
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_APP_PASSWORD
+        sync: false

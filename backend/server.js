@@ -13,10 +13,21 @@ const orgRoutes = require("./routes/org");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
-})); // Configure Helmet to allow frontend to fetch static upload images
+// Allow both local dev and the deployed Vercel frontend
+const allowedOrigins = [
+  'http://localhost:3000',
+  process.env.FRONTEND_URL  // e.g. https://your-app.vercel.app
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+}));
+
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(express.json());
 app.use(cookieParser());
 

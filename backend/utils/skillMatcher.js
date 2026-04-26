@@ -1,7 +1,7 @@
 // Predefined required skills for each job role
 const roleSkills = {
   "Web Developer": {
-    required: ["html", "css", "javascript", "react", "nodejs", "git", "responsive design", "api", "typescript", "webpack"],
+    required: ["html", "css", "javascript", "react", "node.js", "git", "responsive design", "api", "typescript", "webpack"],
     keywords: ["frontend", "backend", "fullstack", "rest", "json", "dom", "npm", "express", "mongodb", "sql"],
     structure: ["projects", "experience", "education", "skills", "summary"]
   },
@@ -26,7 +26,7 @@ const roleSkills = {
     structure: ["projects", "research", "experience", "education", "publications"]
   },
   "Backend Developer": {
-    required: ["nodejs", "python", "java", "sql", "mongodb", "rest api", "git", "docker", "express", "authentication"],
+    required: ["node.js", "python", "java", "sql", "mongodb", "rest api", "git", "docker", "express", "authentication"],
     keywords: ["server", "database", "microservices", "api", "backend", "scalability", "caching", "redis", "postgresql", "security"],
     structure: ["projects", "experience", "education", "skills", "summary"]
   },
@@ -61,7 +61,7 @@ const roleSkills = {
     structure: ["projects", "experience", "education", "skills"]
   },
   "Full Stack Developer": {
-    required: ["javascript", "react", "nodejs", "express", "mongodb", "sql", "git", "api", "html", "css"],
+    required: ["javascript", "react", "node.js", "express", "mongodb", "sql", "git", "api", "html", "css"],
     keywords: ["frontend", "backend", "database", "rest", "server", "deployment", "fullstack", "architecture", "microservices", "agile"],
     structure: ["projects", "experience", "education", "skills"]
   },
@@ -252,8 +252,15 @@ const roleSkills = {
   }
 };
 
-// Normalize text for comparison
-const normalize = (text) => text.toLowerCase().replace(/[^a-z0-9\s\/]/g, " ");
+// Normalize text — lowercase, replace dots/special chars with space, collapse spaces
+const normalize = (text) =>
+  text.toLowerCase()
+    .replace(/[^a-z0-9\s\/]/g, " ")  // replace special chars (including dot) with space
+    .replace(/\s+/g, " ")             // collapse multiple spaces into one
+    .trim();
+
+// Normalize a single skill the same way for consistent comparison
+const normalizeSkill = (skill) => normalize(skill);
 
 const analyzeResume = (resumeText, jobRole) => {
   const role = roleSkills[jobRole];
@@ -262,22 +269,22 @@ const analyzeResume = (resumeText, jobRole) => {
   const text = normalize(resumeText);
 
   // Skills Match Score (40%)
-  const matchedSkills = role.required.filter(skill => text.includes(skill));
-  const missingSkills = role.required.filter(skill => !text.includes(skill));
+  const matchedSkills = role.required.filter(skill => text.includes(normalizeSkill(skill)));
+  const missingSkills  = role.required.filter(skill => !text.includes(normalizeSkill(skill)));
   const skillScore = (matchedSkills.length / role.required.length) * 40;
 
   // Keywords Score (30%)
-  const matchedKeywords = role.keywords.filter(kw => text.includes(kw));
+  const matchedKeywords = role.keywords.filter(kw => text.includes(normalizeSkill(kw)));
   const keywordScore = (matchedKeywords.length / role.keywords.length) * 30;
 
   // Structure Score (30%)
-  const matchedSections = role.structure.filter(sec => text.includes(sec));
-  const missingSections = role.structure.filter(sec => !text.includes(sec));
+  const matchedSections = role.structure.filter(sec => text.includes(normalizeSkill(sec)));
+  const missingSections = role.structure.filter(sec => !text.includes(normalizeSkill(sec)));
   const structureScore = (matchedSections.length / role.structure.length) * 30;
 
   const totalScore = Math.round(skillScore + keywordScore + structureScore);
 
-  // Generate improvement suggestions
+  // Generate improvement suggestions using original skill names (not normalized)
   const suggestions = [
     ...missingSkills.map(s => `Add "${s.charAt(0).toUpperCase() + s.slice(1)}" to your skills section`),
     ...missingSections.map(s => `Include a "${s.charAt(0).toUpperCase() + s.slice(1)}" section in your resume`),
@@ -296,7 +303,7 @@ const analyzeResume = (resumeText, jobRole) => {
     matchedKeywords,
     matchedSections,
     missingSections,
-    suggestions: suggestions.slice(0, 6) // Top 6 suggestions
+    suggestions: suggestions.slice(0, 6)
   };
 };
 
