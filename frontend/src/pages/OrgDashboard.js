@@ -14,6 +14,7 @@ export default function OrgDashboard() {
 
   useEffect(() => {
     fetchCandidates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
   const fetchCandidates = async () => {

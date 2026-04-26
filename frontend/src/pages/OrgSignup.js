@@ -2,7 +2,7 @@ import React, { useState, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import { Building2, Mail, Lock, User as UserIcon } from 'lucide-react';
+import { Building2, Mail, Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function OrgSignup() {
