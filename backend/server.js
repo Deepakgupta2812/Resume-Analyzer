@@ -10,6 +10,12 @@ const path = require("path");
 const profileRoutes = require("./routes/profile");
 const orgRoutes = require("./routes/org");
 
+// add to debugs
+console.log("authRoutes:", typeof authRoutes);
+console.log("resumeRoutes:", typeof resumeRoutes);
+console.log("profileRoutes:", typeof profileRoutes);
+console.log("orgRoutes:", typeof orgRoutes);
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
