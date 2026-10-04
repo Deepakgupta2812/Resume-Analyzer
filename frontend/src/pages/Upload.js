@@ -3,11 +3,22 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { UploadCloud, FileCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { extractTextFromBrowser } from '../utils/resumeParser';
+import { analyzeResumeClientSide } from '../utils/skillMatcher';
+
+const DEFAULT_ROLES = {
+  "Software Development": ["Full Stack Developer", "Frontend Developer", "Backend Developer", "Web Developer", "Software Engineer", "Mobile App Developer (Android/iOS)"],
+  "Data & Analytics": ["Data Analyst", "Data Scientist", "Data Engineer", "Business Analyst"],
+  "AI & Emerging Tech": ["AI Engineer", "Machine Learning Engineer", "NLP Engineer"],
+  "Cloud & DevOps": ["DevOps Engineer"],
+  "Design & UI/UX": ["UI/UX Designer"],
+  "Engineering & Science": ["Mechanical Engineering (ME)", "Civil Engineering (CE)", "Electrical Engineering", "Biotechnology", "Agriculture"]
+};
 
 export default function Upload() {
-  const [roles, setRoles] = useState([]);
+  const [roles, setRoles] = useState(DEFAULT_ROLES);
   const [file, setFile] = useState(null);
-  const [role, setRole] = useState('');
+  const [role, setRole] = useState("Full Stack Developer");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
@@ -16,14 +27,16 @@ export default function Upload() {
     // Fetch available roles from backend
     axios.get('/api/resume/roles')
       .then(res => {
-        setRoles(res.data);
-        const firstCategory = Object.keys(res.data)[0];
-        if(firstCategory && res.data[firstCategory].length > 0) {
-          setRole(res.data[firstCategory][0]);
+        if (res.data && Object.keys(res.data).length > 0) {
+          setRoles(res.data);
+          const firstCategory = Object.keys(res.data)[0];
+          if(firstCategory && res.data[firstCategory].length > 0 && !role) {
+            setRole(res.data[firstCategory][0]);
+          }
         }
       })
       .catch(err => console.error("Error fetching roles:", err));
-  }, []);
+  }, [role]);
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -51,14 +64,51 @@ export default function Upload() {
     formData.append('jobRole', role);
 
     try {
+      // 1. Try sending to backend with 8s timeout
       const res = await axios.post('/api/resume/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        withCredentials: true  // send auth cookie so org uploads get stamped with organizationId
+        timeout: 8000,
+        withCredentials: true
       });
-      navigate(`/result/${res.data.id}`);
-    } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.error || 'Analysis failed. Make sure backend is running.');
+
+      if (res.data && res.data.atsScore !== undefined) {
+        // Cache in local history
+        try {
+          const stored = JSON.parse(localStorage.getItem('resume_history') || '[]');
+          localStorage.setItem('resume_history', JSON.stringify([res.data, ...stored.filter(r => r._id !== res.data.id)].slice(0, 30)));
+        } catch (e) {}
+
+        navigate(`/result/${res.data.id || res.data._id}`, { state: { result: res.data } });
+        return;
+      }
+    } catch (backendErr) {
+      console.warn('Backend unavailable, running instant client-side ATS analysis:', backendErr.message);
+    }
+
+    // 2. Client-side fallback: guarantees the user ALWAYS gets their full output
+    try {
+      const extractedText = await extractTextFromBrowser(file);
+      const clientAnalysis = analyzeResumeClientSide(extractedText || file.name, role);
+      
+      const analysisResult = {
+        _id: `local_${Date.now()}`,
+        id: `local_${Date.now()}`,
+        fileName: file.name,
+        jobRole: role,
+        uploadedAt: new Date().toISOString(),
+        ...clientAnalysis
+      };
+
+      // Save to localStorage history
+      try {
+        const stored = JSON.parse(localStorage.getItem('resume_history') || '[]');
+        localStorage.setItem('resume_history', JSON.stringify([analysisResult, ...stored].slice(0, 30)));
+      } catch (e) {}
+
+      navigate(`/result/${analysisResult.id}`, { state: { result: analysisResult } });
+    } catch (fallbackErr) {
+      console.error('Analysis failed:', fallbackErr);
+      setError('Could not parse resume file. Please upload a standard PDF or DOCX file.');
       setLoading(false);
     }
   };

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
@@ -8,13 +8,45 @@ import { motion } from 'framer-motion';
 
 export default function Result() {
   const { id } = useParams();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [aiSuggestions, setAiSuggestions] = useState([]);
+  const location = useLocation();
+  const stateResult = location.state?.result;
+  const [data, setData] = useState(stateResult || null);
+  const [loading, setLoading] = useState(!stateResult);
+  const [aiSuggestions, setAiSuggestions] = useState(stateResult?.aiSuggestions || []);
   const [aiLoading, setAiLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
+    // If we have state passed from upload, we only need to fetch AI suggestions if missing
+    if (stateResult) {
+      if (stateResult.missingSkills && stateResult.missingSkills.length > 0 && aiSuggestions.length === 0) {
+        setAiLoading(true);
+        axios.post('/api/resume/ai-suggestions', {
+          missingSkills: stateResult.missingSkills,
+          jobRole: stateResult.jobRole
+        }).then(aiRes => {
+          setAiSuggestions(aiRes.data?.aiSuggestions || []);
+          setAiLoading(false);
+        }).catch(() => setAiLoading(false));
+      }
+      return;
+    }
+
+    // Check local storage cache if available
+    try {
+      const stored = JSON.parse(localStorage.getItem('resume_history') || '[]');
+      const found = stored.find(r => r.id === id || r._id === id);
+      if (found) {
+        setData(found);
+        setLoading(false);
+        if (found.aiSuggestions && found.aiSuggestions.length > 0) {
+          setAiSuggestions(found.aiSuggestions);
+        }
+        return;
+      }
+    } catch (e) {}
+
+    // Direct link or page refresh: fetch from backend
     axios.get(`/api/resume/${id}`)
       .then(res => {
         setData(res.data);
@@ -25,13 +57,16 @@ export default function Result() {
             missingSkills: res.data.missingSkills,
             jobRole: res.data.jobRole
           }).then(aiRes => {
-            setAiSuggestions(aiRes.data.aiSuggestions);
+            setAiSuggestions(aiRes.data?.aiSuggestions || []);
             setAiLoading(false);
           }).catch(() => setAiLoading(false));
         }
       })
-      .catch(err => { console.error(err); setLoading(false); });
-  }, [id]);
+      .catch(err => {
+        console.error("Failed to load resume result:", err);
+        setLoading(false);
+      });
+  }, [id, stateResult]);
 
   const getScoreColor = (score) => {
     if (score >= 80) return '#10b981';

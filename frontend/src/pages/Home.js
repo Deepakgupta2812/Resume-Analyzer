@@ -27,7 +27,7 @@ export default function Home() {
         transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
         style={{ display: 'inline-block' }}
       >
-        <Link to={user ? "/upload" : "/login"} className="btn-primary" style={{ fontSize: '1.2rem', padding: '16px 36px', borderRadius: '30px' }}>
+        <Link to="/upload" className="btn-primary" style={{ fontSize: '1.2rem', padding: '16px 36px', borderRadius: '30px' }}>
           Get Started Now
         </Link>
       </motion.div>

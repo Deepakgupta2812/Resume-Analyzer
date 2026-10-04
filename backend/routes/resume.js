@@ -8,12 +8,21 @@ const Resume = require("../models/Resume");
 const { analyzeResume, roleSkills } = require("../utils/skillMatcher");
 const { optionalAuthMiddleware, authMiddleware } = require("../middleware/authMiddleware");
 
+const mongoose = require("mongoose");
 const router = express.Router();
 
+// In-memory cache for recent analyses to guarantee instant result display
+const recentAnalyses = new Map();
+
 // Multer config — store in /uploads, accept PDF and DOC/DOCX
+const uploadDir = path.join(__dirname, "../uploads");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, "../uploads")),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_')}`)
 });
 
 const upload = multer({
@@ -29,13 +38,17 @@ const upload = multer({
 // Extract text from uploaded file
 const extractText = async (filePath, mimetype) => {
   const ext = path.extname(filePath).toLowerCase();
-  if (ext === ".pdf") {
-    const buffer = fs.readFileSync(filePath);
-    const data = await pdfParse(buffer);
-    return data.text;
-  } else if (ext === ".doc" || ext === ".docx") {
-    const result = await mammoth.extractRawText({ path: filePath });
-    return result.value;
+  try {
+    if (ext === ".pdf") {
+      const buffer = fs.readFileSync(filePath);
+      const data = await pdfParse(buffer);
+      return data.text || "";
+    } else if (ext === ".doc" || ext === ".docx") {
+      const result = await mammoth.extractRawText({ path: filePath });
+      return result.value || "";
+    }
+  } catch (err) {
+    console.error("Text extraction failed:", err);
   }
   return "";
 };
@@ -45,38 +58,60 @@ router.post("/upload", optionalAuthMiddleware, upload.single("resume"), async (r
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
     const { jobRole } = req.body;
-    if (!jobRole || !roleSkills[jobRole]) return res.status(400).json({ error: "Invalid job role" });
+    if (!jobRole || !roleSkills[jobRole]) return res.status(400).json({ error: "Invalid job role selected" });
 
     const text = await extractText(req.file.path, req.file.mimetype);
-    if (!text.trim()) return res.status(400).json({ error: "Could not extract text from file" });
+    if (!text || !text.trim()) {
+      return res.status(400).json({ 
+        error: "Could not extract text from this document. Please ensure the file has selectable text and is not a scanned image." 
+      });
+    }
 
     const analysis = analyzeResume(text, jobRole);
 
-    // Save to MongoDB
     const payload = {
       fileName: req.file.originalname,
       jobRole,
-      ...analysis
+      ...analysis,
+      uploadedAt: new Date().toISOString()
     };
 
-    if (req.user) {
-      payload.user = req.user.id;
-      // If uploader is an org user, stamp their organizationId so only that org can see it
-      const uploader = await require('../models/User').findById(req.user.id).select('role organizationId');
-      if (uploader?.role === 'organization' && uploader.organizationId) {
-        payload.organization = uploader.organizationId;
+    let savedId = `res_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+    // Save to MongoDB if connected
+    if (mongoose.connection.readyState === 1) {
+      try {
+        if (req.user) {
+          payload.user = req.user.id;
+          const uploader = await require('../models/User').findById(req.user.id).select('role organizationId');
+          if (uploader?.role === 'organization' && uploader.organizationId) {
+            payload.organization = uploader.organizationId;
+          }
+        }
+        const saved = await Resume.create(payload);
+        savedId = saved._id.toString();
+      } catch (dbErr) {
+        console.warn("Could not persist analysis to DB:", dbErr.message);
       }
     }
 
-    const saved = await Resume.create(payload);
+    // Always cache in memory as fallback
+    recentAnalyses.set(String(savedId), { _id: savedId, ...payload });
+    // Keep cache bounded
+    if (recentAnalyses.size > 100) {
+      const firstKey = recentAnalyses.keys().next().value;
+      recentAnalyses.delete(firstKey);
+    }
 
-    // Clean up uploaded file
-    fs.unlinkSync(req.file.path);
-
-    res.json({ id: saved._id, ...analysis });
+    res.json({ id: savedId, ...payload });
   } catch (err) {
-    console.error(err);
+    console.error("Analysis route error:", err);
     res.status(500).json({ error: err.message || "Analysis failed" });
+  } finally {
+    // Clean up uploaded file
+    if (req.file && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+    }
   }
 });
 
@@ -140,10 +175,21 @@ router.get("/roles", (req, res) => {
 // GET /api/resume/:id — fetch a saved result by ID
 router.get("/:id", async (req, res) => {
   try {
-    const resume = await Resume.findById(req.params.id);
-    if (!resume) return res.status(404).json({ error: "Not found" });
-    res.json(resume);
-  } catch {
+    if (mongoose.connection.readyState === 1 && mongoose.isValidObjectId(req.params.id)) {
+      const resume = await Resume.findById(req.params.id);
+      if (resume) return res.json(resume);
+    }
+    
+    // Check in-memory cache
+    if (recentAnalyses.has(req.params.id)) {
+      return res.json(recentAnalyses.get(req.params.id));
+    }
+    
+    res.status(404).json({ error: "Result not found" });
+  } catch (err) {
+    if (recentAnalyses.has(req.params.id)) {
+      return res.json(recentAnalyses.get(req.params.id));
+    }
     res.status(500).json({ error: "Server error" });
   }
 });

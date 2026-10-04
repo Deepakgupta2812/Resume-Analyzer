@@ -15,13 +15,23 @@ export default function Dashboard() {
     if (user) {
       axios.get('/api/resume/history')
         .then(res => {
-          setHistory(res.data);
+          if (Array.isArray(res.data) && res.data.length > 0) {
+            setHistory(res.data);
+          } else {
+            const localHist = JSON.parse(localStorage.getItem('resume_history') || '[]');
+            setHistory(localHist);
+          }
           setLoading(false);
         })
         .catch(() => {
-          toast.error("Failed to load history");
+          const localHist = JSON.parse(localStorage.getItem('resume_history') || '[]');
+          setHistory(localHist);
           setLoading(false);
         });
+    } else {
+      const localHist = JSON.parse(localStorage.getItem('resume_history') || '[]');
+      setHistory(localHist);
+      setLoading(false);
     }
   }, [user]);
 

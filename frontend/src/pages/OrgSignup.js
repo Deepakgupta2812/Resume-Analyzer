@@ -25,7 +25,7 @@ export default function OrgSignup() {
         { name, email, password },
         { withCredentials: true }
       );
-      login(res.data.user);
+      login(res.data.user, res.data.token);
       navigate('/org/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed');

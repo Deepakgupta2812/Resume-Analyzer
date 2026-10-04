@@ -1,7 +1,17 @@
 const jwt = require("jsonwebtoken");
 
+const extractToken = (req) => {
+  if (req.cookies && req.cookies.token) {
+    return req.cookies.token;
+  }
+  if (req.headers && req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+    return req.headers.authorization.split(" ")[1];
+  }
+  return null;
+};
+
 const authMiddleware = (req, res, next) => {
-  const token = req.cookies.token;
+  const token = extractToken(req);
   if (!token) return res.status(401).json({ error: "Unauthorized. Please log in." });
 
   try {
@@ -9,13 +19,13 @@ const authMiddleware = (req, res, next) => {
     req.user = decoded;
     next();
   } catch (err) {
-    res.clearCookie("token");
+    if (res.clearCookie) res.clearCookie("token");
     return res.status(401).json({ error: "Invalid session. Please log in again." });
   }
 };
 
 const optionalAuthMiddleware = (req, res, next) => {
-  const token = req.cookies.token;
+  const token = extractToken(req);
   if (!token) return next();
 
   try {
@@ -23,7 +33,7 @@ const optionalAuthMiddleware = (req, res, next) => {
     req.user = decoded;
     next();
   } catch (err) {
-    res.clearCookie("token");
+    if (res.clearCookie) res.clearCookie("token");
     next();
   }
 };

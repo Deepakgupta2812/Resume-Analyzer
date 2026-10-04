@@ -21,7 +21,7 @@ export default function Login() {
   
   const [loading, setLoading] = useState(false);
   
-  const { setUser } = useContext(AuthContext);
+  const { login, setUser } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const resetFormValues = () => {
@@ -40,7 +40,7 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await axios.post('/api/auth/login', { identifier, password });
-      setUser(res.data.user);
+      login(res.data.user, res.data.token);
       toast.success('Logged in successfully!');
       navigate('/dashboard');
     } catch (err) {
@@ -57,7 +57,7 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await axios.post('/api/auth/signup', { name, identifier, password });
-      setUser(res.data.user);
+      login(res.data.user, res.data.token);
       toast.success('Account created successfully!');
       navigate('/dashboard');
     } catch (err) {

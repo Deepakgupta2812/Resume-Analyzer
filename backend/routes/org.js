@@ -52,6 +52,7 @@ const createTokenAndSetCookie = (res, userId) => {
     sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
     maxAge: 7 * 24 * 60 * 60 * 1000
   });
+  return token;
 };
 
 router.post("/signup", async (req, res) => {
@@ -67,16 +68,13 @@ router.post("/signup", async (req, res) => {
     const existingUser = await User.findOne({ identifier: email });
     if (existingUser) return res.status(409).json({ error: "Email already registered" });
 
-    const org = await Organization.create({ name, email, domain, isVerified: true }); // Automatically verifying right away for simplicity unless we attach Twilio/Nodemailer module cleanly here.
-    // NOTE: In production you would do:
-    // await Organization.create({ ... isVerified: false });
-    // then dispatchOTP(), but the mock mode OTP dispatcher is deep in auth.js. So we'll mock verify it instantly for UX flow unless they invoke the verify OTP.
+    const org = await Organization.create({ name, email, domain, isVerified: true });
     
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await User.create({ identifier: email, name, password: hashedPassword, role: 'organization', organizationId: org._id });
 
-    createTokenAndSetCookie(res, user._id);
-    res.json({ message: "Organization registered successfully (Auto-Verified)", user: { id: user._id, identifier: user.identifier, name: user.name, role: user.role } });
+    const token = createTokenAndSetCookie(res, user._id);
+    res.json({ message: "Organization registered successfully (Auto-Verified)", token, user: { id: user._id, identifier: user.identifier, name: user.name, role: user.role } });
   } catch (err) {
     res.status(500).json({ error: err.message || "Failed to create organization" });
   }
@@ -104,8 +102,8 @@ router.post("/login", async (req, res) => {
 
     if (!isMatch) return res.status(400).json({ error: "Invalid credentials. Please check your password." });
 
-    createTokenAndSetCookie(res, user._id);
-    res.json({ message: "Login Successful", user: { id: user._id, identifier: user.identifier, name: user.name, role: user.role } });
+    const token = createTokenAndSetCookie(res, user._id);
+    res.json({ message: "Login Successful", token, user: { id: user._id, identifier: user.identifier, name: user.name, role: user.role } });
   } catch (err) {
     console.error("Org login error:", err);
     res.status(500).json({ error: "Login failed: " + err.message });

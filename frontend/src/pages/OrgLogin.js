@@ -39,7 +39,7 @@ export default function OrgLogin() {
         { email, password },
         { withCredentials: true }
       );
-      login(res.data.user);
+      login(res.data.user, res.data.token);
       toast.success('Login Successful! Welcome back.');
       navigate('/org/dashboard');
     } catch (err) {

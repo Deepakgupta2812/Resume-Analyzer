@@ -18,6 +18,7 @@ const createTokenAndSetCookie = (res, userId) => {
     sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
+  return token;
 };
 
 const sendOTP = async (email, otp) => {
@@ -58,8 +59,8 @@ router.post("/signup", async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
     const user = await User.create({ name, identifier, password: hashed, role: "candidate" });
 
-    createTokenAndSetCookie(res, user._id);
-    res.json({ message: "Account created", user: { id: user._id, name: user.name, identifier: user.identifier, role: user.role } });
+    const token = createTokenAndSetCookie(res, user._id);
+    res.json({ message: "Account created", token, user: { id: user._id, name: user.name, identifier: user.identifier, role: user.role } });
   } catch (err) {
     res.status(500).json({ error: err.message || "Signup failed" });
   }
@@ -78,8 +79,8 @@ router.post("/login", async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ error: "Invalid credentials" });
 
-    createTokenAndSetCookie(res, user._id);
-    res.json({ message: "Login successful", user: { id: user._id, name: user.name, identifier: user.identifier, role: user.role } });
+    const token = createTokenAndSetCookie(res, user._id);
+    res.json({ message: "Login successful", token, user: { id: user._id, name: user.name, identifier: user.identifier, role: user.role } });
   } catch (err) {
     res.status(500).json({ error: err.message || "Login failed" });
   }
